@@ -236,6 +236,19 @@ $(patsubst ./%,%, \
 endef
 
 ###########################################################
+## Find all of the .proto files under the named directories.
+## Meant to be used like:
+##    SRC_FILES := $(call all-proto-files-under,src)
+###########################################################
+
+define all-proto-files-under
+$(patsubst ./%,%, \
+  $(shell cd $(LOCAL_PATH) ; \
+          find $(1) -name "*.proto" -and -not -name ".*") \
+  )
+endef
+
+###########################################################
 ## Find all of the html files under the named directories.
 ## Meant to be used like:
 ##    SRC_FILES := $(call all-html-files-under,src tests)
@@ -746,6 +759,36 @@ endef
 
 
 ###########################################################
+## Commands for running protoc to compile .proto into .java
+###########################################################
+
+define transform-proto-to-java
+@mkdir -p $(dir $@)
+@echo "Protoc: $@ <= $(PRIVATE_PROTO_SRC_FILES)"
+@rm -rf $(PRIVATE_PROTO_JAVA_OUTPUT_DIR)
+@mkdir -p $(PRIVATE_PROTO_JAVA_OUTPUT_DIR)
+$(hide) $(PROTOC) \
+	$(addprefix --proto_path=, $(PRIVATE_PROTO_INCLUDES)) \
+	$(PRIVATE_PROTO_JAVA_OUTPUT_OPTION)=$(PRIVATE_PROTO_JAVA_OUTPUT_DIR) \
+	$(PRIVATE_PROTOC_FLAGS) \
+	$(PRIVATE_PROTO_SRC_FILES)
+$(hide) touch $@
+endef
+
+######################################################################
+## Commands for running protoc to compile .proto into .pb.cc and .pb.h
+######################################################################
+define transform-proto-to-cc
+@mkdir -p $(dir $@)
+@echo "Protoc: $@ <= $<"
+$(hide) $(PROTOC) \
+	$(addprefix --proto_path=, $(PRIVATE_PROTO_INCLUDES)) \
+	$(PRIVATE_PROTOC_FLAGS) \
+	--cpp_out=$(PRIVATE_PROTO_CC_OUTPUT_DIR) $<
+endef
+
+
+###########################################################
 ## Commands for running gcc to compile a C++ file
 ###########################################################
 
@@ -1001,7 +1044,7 @@ endef
 # it to be overriden en-masse see combo/linux-arm.make for an example.
 ifneq ($(HOST_CUSTOM_LD_COMMAND),true)
 define transform-host-o-to-shared-lib-inner
-$(HOST_CXX) \
+$(PRIVATE_CXX) \
 	-Wl,-rpath-link=$(TARGET_OUT_INTERMEDIATE_LIBRARIES) \
 	-Wl,-rpath,\$$ORIGIN/../lib \
 	-shared -Wl,-soname,$(notdir $@) \
@@ -1051,7 +1094,7 @@ endef
 # it to be overriden en-masse see combo/linux-arm.make for an example.
 ifneq ($(TARGET_CUSTOM_LD_COMMAND),true)
 define transform-o-to-shared-lib-inner
-$(TARGET_CXX) \
+$(PRIVATE_CXX) \
 	$(PRIVATE_TARGET_GLOBAL_LDFLAGS) \
 	-Wl,-rpath-link=$(TARGET_OUT_INTERMEDIATE_LIBRARIES) \
 	-Wl,-rpath,\$$ORIGIN/../lib \
@@ -1086,13 +1129,10 @@ endef
 ## Commands for filtering a target executable or library
 ###########################################################
 
-# Because of bug 743462 ("Prelinked image magic gets stripped
-# by arm-elf-objcopy"), we have to use soslim to strip target
-# binaries.
 define transform-to-stripped
 @mkdir -p $(dir $@)
 @echo "target Strip: $(PRIVATE_MODULE) ($@)"
-$(hide) $(SOSLIM) --strip --shady --quiet $< --outfile $@
+$(hide) $(TARGET_STRIP_COMMAND)
 endef
 
 define transform-to-prelinked
@@ -1113,7 +1153,7 @@ endef
 
 ifneq ($(TARGET_CUSTOM_LD_COMMAND),true)
 define transform-o-to-executable-inner
-$(TARGET_CXX) \
+$(PRIVATE_CXX) \
 	$(TARGET_GLOBAL_LDFLAGS) \
 	-Wl,-rpath-link=$(TARGET_OUT_INTERMEDIATE_LIBRARIES) \
 	$(TARGET_GLOBAL_LD_DIRS) \
@@ -1164,7 +1204,7 @@ endef
 
 ifneq ($(HOST_CUSTOM_LD_COMMAND),true)
 define transform-host-o-to-executable-inner
-$(HOST_CXX) \
+$(PRIVATE_CXX) \
 	-Wl,-rpath-link=$(TARGET_OUT_INTERMEDIATE_LIBRARIES) \
 	-Wl,-rpath,\$$ORIGIN/../lib \
 	$(HOST_GLOBAL_LD_DIRS) \
@@ -1231,7 +1271,7 @@ endef
 ifeq ($(HOST_OS),windows)
 xlint_unchecked :=
 else
-#xlint_unchecked := -Xlint:unchecked
+xlint_unchecked := -Xlint:unchecked
 endif
 
 # emit-line, <word list>, <output file>
@@ -1301,7 +1341,8 @@ $(hide) tr ' ' '\n' < $(dir $(PRIVATE_CLASS_INTERMEDIATES_DIR))/java-source-list
 $(hide) $(TARGET_JAVAC) -encoding ascii $(PRIVATE_BOOTCLASSPATH) \
     $(addprefix -classpath ,$(strip \
         $(call normalize-path-list,$(PRIVATE_ALL_JAVA_LIBRARIES)))) \
-    $(PRIVATE_JAVACFLAGS) $(strip $(PRIVATE_JAVAC_DEBUG_FLAGS)) $(xlint_unchecked) \
+    $(PRIVATE_JAVACFLAGS) $(strip $(PRIVATE_JAVAC_DEBUG_FLAGS)) \
+	$(if $(findstring true,$(LOCAL_WARNINGS_ENABLE)),$(xlint_unchecked),) \
     -extdirs "" -d $(PRIVATE_CLASS_INTERMEDIATES_DIR) \
     \@$(dir $(PRIVATE_CLASS_INTERMEDIATES_DIR))/java-source-list-uniq \
     || ( rm -rf $(PRIVATE_CLASS_INTERMEDIATES_DIR) ; exit 41 )
@@ -1656,10 +1697,11 @@ endif
 
 # Convert a partition data size (eg, as reported in /proc/mtd) to the
 # size of the image used to flash that partition (which includes a
-# 64-byte spare area for each 2048-byte page).
+# spare area for each page).
 # $(1): the partition data size
 define image-size-from-data-size
-$(shell echo $$(($(1) / 2048 * (2048+64))))
+$(shell echo $$(($(1) / $(BOARD_NAND_PAGE_SIZE) * \
+  ($(BOARD_NAND_PAGE_SIZE)+$(BOARD_NAND_SPARE_SIZE)))))
 endef
 
 # $(1): The file(s) to check (often $@)

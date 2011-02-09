@@ -311,7 +311,7 @@ function chooseproduct()
         if [ "$TARGET_SIMULATOR" = true ] ; then
             default_value=sim
         else
-            default_value=generic
+            default_value=full
         fi
     fi
 
@@ -376,7 +376,7 @@ function choosevariant()
             export TARGET_BUILD_VARIANT=$default_value
         elif (echo -n $ANSWER | grep -q -e "^[0-9][0-9]*$") ; then
             if [ "$ANSWER" -le "${#VARIANT_CHOICES[@]}" ] ; then
-                export TARGET_BUILD_VARIANT=${VARIANT_CHOICES[$(($ANSWER-$_arrayoffset))]}
+                export TARGET_BUILD_VARIANT=${VARIANT_CHOICES[$(($ANSWER-1))]}
             fi
         else
             if check_variant $ANSWER
@@ -429,7 +429,8 @@ function add_lunch_combo()
 }
 
 # add the default one here
-add_lunch_combo generic-eng
+add_lunch_combo full-eng
+add_lunch_combo full_x86-eng
 
 # if we're on linux, add the simulator.  There is a special case
 # in lunch to deal with the simulator
@@ -464,7 +465,7 @@ function lunch()
         answer=$1
     else
         print_lunch_menu
-        echo -n "Which would you like? [generic-eng] "
+        echo -n "Which would you like? [full-eng] "
         read answer
     fi
 
@@ -472,7 +473,7 @@ function lunch()
 
     if [ -z "$answer" ]
     then
-        selection=generic-eng
+        selection=full-eng
     elif [ "$answer" = "simulator" ]
     then
         selection=simulator
@@ -480,7 +481,7 @@ function lunch()
     then
         if [ $answer -le ${#LUNCH_MENU_CHOICES[@]} ]
         then
-            selection=${LUNCH_MENU_CHOICES[$(($answer-$_arrayoffset))]}
+            selection=${LUNCH_MENU_CHOICES[$(($answer-1))]}
         fi
     elif (echo -n $answer | grep -q -e "^[^\-][^\-]*-[^\-][^\-]*$")
     then
@@ -560,7 +561,7 @@ function tapas()
         apps=all
     fi
 
-    export TARGET_PRODUCT=generic
+    export TARGET_PRODUCT=full
     export TARGET_BUILD_VARIANT=$variant
     export TARGET_SIMULATOR=false
     export TARGET_BUILD_TYPE=release
@@ -1059,10 +1060,9 @@ function godir () {
                 echo "Invalid choice"
                 continue
             fi
-            pathname=${lines[$(($choice-$_arrayoffset))]}
+            pathname=${lines[$(($choice-1))]}
         done
     else
-        # even though zsh arrays are 1-based, $foo[0] is an alias for $foo[1]
         pathname=${lines[0]}
     fi
     cd $T/$pathname
@@ -1082,18 +1082,16 @@ function set_java_home() {
     fi
 }
 
-# determine whether arrays are zero-based (bash) or one-based (zsh)
-_xarray=(a b c)
-if [ -z "${_xarray[${#_xarray[@]}]}" ]
-then
-    _arrayoffset=1
-else
-    _arrayoffset=0
-fi
-unset _xarray
+case `ps -o command -p $$` in
+    *bash*)
+        ;;
+    *)
+        echo "WARNING: Only bash is supported, use of other shell would lead to erroneous results"
+        ;;
+esac
 
 # Execute the contents of any vendorsetup.sh files we can find.
-for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/build/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
+for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/*/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
 do
     echo "including $f"
     . $f

@@ -48,6 +48,12 @@ ifeq ($(strip $(LOCAL_NO_FDO_SUPPORT)),)
 endif
 
 ###########################################################
+## Explicitly declare assembly-only __ASSEMBLY__ macro for
+## assembly source
+###########################################################
+LOCAL_ASFLAGS += -D__ASSEMBLY__
+
+###########################################################
 ## Define PRIVATE_ variables from global vars
 ###########################################################
 ifdef LOCAL_NDK_VERSION
@@ -102,6 +108,7 @@ endif
 ## Define arm-vs-thumb-mode flags.
 ###########################################################
 LOCAL_ARM_MODE := $(strip $(LOCAL_ARM_MODE))
+ifeq ($(TARGET_ARCH),arm)
 arm_objects_mode := $(if $(LOCAL_ARM_MODE),$(LOCAL_ARM_MODE),arm)
 normal_objects_mode := $(if $(LOCAL_ARM_MODE),$(LOCAL_ARM_MODE),thumb)
 
@@ -110,6 +117,12 @@ normal_objects_mode := $(if $(LOCAL_ARM_MODE),$(LOCAL_ARM_MODE),thumb)
 # actually used (although they are usually empty).
 arm_objects_cflags := $($(my_prefix)$(arm_objects_mode)_CFLAGS)
 normal_objects_cflags := $($(my_prefix)$(normal_objects_mode)_CFLAGS)
+else
+arm_objects_mode :=
+normal_objects_mode :=
+arm_objects_cflags :=
+normal_objects_cflags :=
+endif
 
 ###########################################################
 ## Define per-module debugging flags.  Users can turn on
@@ -130,6 +143,44 @@ endif
 $(LOCAL_GENERATED_SOURCES): PRIVATE_MODULE := $(LOCAL_MODULE)
 
 ALL_GENERATED_SOURCES += $(LOCAL_GENERATED_SOURCES)
+
+
+###########################################################
+## Compile the .proto files to .cc and then to .o
+###########################################################
+proto_sources := $(filter %.proto,$(LOCAL_SRC_FILES))
+proto_generated_objects :=
+proto_generated_headers :=
+ifneq ($(proto_sources),)
+proto_sources_fullpath := $(addprefix $(LOCAL_PATH)/, $(proto_sources))
+proto_generated_cc_sources_dir := $(intermediates)/proto
+proto_generated_cc_sources := $(addprefix $(proto_generated_cc_sources_dir)/, \
+	$(patsubst %.proto,%.pb.cc,$(proto_sources_fullpath)))
+proto_generated_objects := $(patsubst %.cc,%.o, $(proto_generated_cc_sources))
+
+$(proto_generated_cc_sources): PRIVATE_PROTO_INCLUDES := $(TOP)
+$(proto_generated_cc_sources): PRIVATE_PROTO_CC_OUTPUT_DIR := $(proto_generated_cc_sources_dir)
+$(proto_generated_cc_sources): PRIVATE_PROTOC_FLAGS := $(LOCAL_PROTOC_FLAGS)
+$(proto_generated_cc_sources): $(proto_generated_cc_sources_dir)/%.pb.cc: %.proto $(PROTOC)
+	$(transform-proto-to-cc)
+
+proto_generated_headers := $(patsubst %.pb.cc,%.pb.h, $(proto_generated_cc_sources))
+$(proto_generated_headers): $(proto_generated_cc_sources_dir)/%.pb.h: $(proto_generated_cc_sources_dir)/%.pb.cc
+
+$(proto_generated_cc_sources): PRIVATE_ARM_MODE := $(normal_objects_mode)
+$(proto_generated_cc_sources): PRIVATE_ARM_CFLAGS := $(normal_objects_cflags)
+$(proto_generated_objects): $(proto_generated_cc_sources_dir)/%.o: $(proto_generated_cc_sources_dir)/%.cc
+	$(transform-$(PRIVATE_HOST)cpp-to-o)
+-include $(proto_generated_objects:%.o=%.P)
+
+LOCAL_C_INCLUDES += external/protobuf/src $(proto_generated_cc_sources_dir)
+LOCAL_CFLAGS += -DGOOGLE_PROTOBUF_NO_RTTI
+ifeq ($(LOCAL_PROTOC_OPTIMIZE_TYPE),full)
+LOCAL_STATIC_LIBRARIES += libprotobuf-cpp-2.3.0-full
+else
+LOCAL_STATIC_LIBRARIES += libprotobuf-cpp-2.3.0-lite
+endif
+endif
 
 
 ###########################################################
@@ -200,7 +251,7 @@ cpp_objects        := $(cpp_arm_objects) $(cpp_normal_objects)
 ifneq ($(strip $(cpp_objects)),)
 $(cpp_objects): $(intermediates)/%.o: \
 		$(TOPDIR)$(LOCAL_PATH)/%$(LOCAL_CPP_EXTENSION) \
-		$(yacc_cpps) $(LOCAL_ADDITIONAL_DEPENDENCIES)
+		$(yacc_cpps) $(proto_generated_headers) $(LOCAL_ADDITIONAL_DEPENDENCIES)
 	$(transform-$(PRIVATE_HOST)cpp-to-o)
 -include $(cpp_objects:%.o=%.P)
 endif
@@ -217,7 +268,7 @@ ifneq ($(strip $(gen_cpp_objects)),)
 # TODO: support compiling certain generated files as arm.
 $(gen_cpp_objects): PRIVATE_ARM_MODE := $(normal_objects_mode)
 $(gen_cpp_objects): PRIVATE_ARM_CFLAGS := $(normal_objects_cflags)
-$(gen_cpp_objects): $(intermediates)/%.o: $(intermediates)/%$(LOCAL_CPP_EXTENSION) $(yacc_cpps) $(LOCAL_ADDITIONAL_DEPENDENCIES)
+$(gen_cpp_objects): $(intermediates)/%.o: $(intermediates)/%$(LOCAL_CPP_EXTENSION) $(yacc_cpps) $(proto_generated_headers) $(LOCAL_ADDITIONAL_DEPENDENCIES)
 	$(transform-$(PRIVATE_HOST)cpp-to-o)
 -include $(gen_cpp_objects:%.o=%.P)
 endif
@@ -264,7 +315,7 @@ $(c_normal_objects): PRIVATE_ARM_CFLAGS := $(normal_objects_cflags)
 c_objects        := $(c_arm_objects) $(c_normal_objects)
 
 ifneq ($(strip $(c_objects)),)
-$(c_objects): $(intermediates)/%.o: $(TOPDIR)$(LOCAL_PATH)/%.c $(yacc_cpps) $(LOCAL_ADDITIONAL_DEPENDENCIES)
+$(c_objects): $(intermediates)/%.o: $(TOPDIR)$(LOCAL_PATH)/%.c $(yacc_cpps) $(proto_generated_headers) $(LOCAL_ADDITIONAL_DEPENDENCIES)
 	$(transform-$(PRIVATE_HOST)c-to-o)
 -include $(c_objects:%.o=%.P)
 endif
@@ -281,7 +332,7 @@ ifneq ($(strip $(gen_c_objects)),)
 # TODO: support compiling certain generated files as arm.
 $(gen_c_objects): PRIVATE_ARM_MODE := $(normal_objects_mode)
 $(gen_c_objects): PRIVATE_ARM_CFLAGS := $(normal_objects_cflags)
-$(gen_c_objects): $(intermediates)/%.o: $(intermediates)/%.c $(yacc_cpps) $(LOCAL_ADDITIONAL_DEPENDENCIES)
+$(gen_c_objects): $(intermediates)/%.o: $(intermediates)/%.c $(yacc_cpps) $(proto_generated_headers) $(LOCAL_ADDITIONAL_DEPENDENCIES)
 	$(transform-$(PRIVATE_HOST)c-to-o)
 -include $(gen_c_objects:%.o=%.P)
 endif
@@ -294,7 +345,7 @@ objc_sources := $(filter %.m,$(LOCAL_SRC_FILES))
 objc_objects := $(addprefix $(intermediates)/,$(objc_sources:.m=.o))
 
 ifneq ($(strip $(objc_objects)),)
-$(objc_objects): $(intermediates)/%.o: $(TOPDIR)$(LOCAL_PATH)/%.m $(yacc_cpps) $(PRIVATE_ADDITIONAL_DEPENDENCIES)
+$(objc_objects): $(intermediates)/%.o: $(TOPDIR)$(LOCAL_PATH)/%.m $(yacc_cpps) $(proto_generated_headers) $(PRIVATE_ADDITIONAL_DEPENDENCIES)
 	$(transform-$(PRIVATE_HOST)m-to-o)
 -include $(objc_objects:%.o=%.P)
 endif
@@ -339,6 +390,7 @@ all_objects := \
 	$(gen_c_objects) \
 	$(yacc_objects) \
 	$(lex_objects) \
+	$(proto_generated_objects) \
 	$(addprefix $(TOPDIR)$(LOCAL_PATH)/,$(LOCAL_PREBUILT_OBJ_FILES))
 
 LOCAL_C_INCLUDES += $(TOPDIR)$(LOCAL_PATH) $(intermediates) $(base_intermediates)

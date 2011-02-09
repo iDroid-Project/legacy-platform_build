@@ -65,7 +65,7 @@ endif
 # Only the tags mentioned in this test are expected to be set by module
 # makefiles. Anything else is either a typo or a source of unexpected
 # behaviors.
-ifneq ($(filter-out user debug eng tests optional samples,$(LOCAL_MODULE_TAGS)),)
+ifneq ($(filter-out user debug eng tests optional samples shell_ash shell_mksh,$(LOCAL_MODULE_TAGS)),)
 $(warning unusual tags $(LOCAL_MODULE_TAGS) on $(LOCAL_MODULE) at $(LOCAL_PATH))
 endif
 
@@ -261,6 +261,44 @@ else
 logtags_java_sources :=
 event_log_tags :=
 endif
+
+###########################################################
+## .proto files: Compile proto files to .java
+###########################################################
+proto_sources := $(filter %.proto,$(LOCAL_SRC_FILES))
+# Because names of the .java files compiled from .proto files are unknown until the
+# .proto files are compiled, we use a timestamp file as depedency.
+proto_java_sources_file_stamp :=
+ifneq ($(proto_sources),)
+proto_sources_fullpath := $(addprefix $(TOP_DIR)$(LOCAL_PATH)/, $(proto_sources))
+# By putting the generated java files into $(LOCAL_INTERMEDIATE_SOURCE_DIR), they will be
+# automatically found by the java compiling function transform-java-to-classes.jar.
+ifneq ($(LOCAL_INTERMEDIATE_SOURCE_DIR),)
+proto_java_intemediate_dir := $(LOCAL_INTERMEDIATE_SOURCE_DIR)/proto
+else
+# LOCAL_INTERMEDIATE_SOURCE_DIR may be not defined in non-java modules.
+proto_java_intemediate_dir := $(intermediates)/proto
+endif
+proto_java_sources_file_stamp := $(proto_java_intemediate_dir)/Proto.stamp
+proto_java_sources_dir := $(proto_java_intemediate_dir)/src
+
+$(proto_java_sources_file_stamp): PRIVATE_PROTO_INCLUDES := $(TOP)
+$(proto_java_sources_file_stamp): PRIVATE_PROTO_SRC_FILES := $(proto_sources_fullpath)
+$(proto_java_sources_file_stamp): PRIVATE_PROTO_JAVA_OUTPUT_DIR := $(proto_java_sources_dir)
+ifeq ($(LOCAL_PROTOC_OPTIMIZE_TYPE),micro)
+$(proto_java_sources_file_stamp): PRIVATE_PROTO_JAVA_OUTPUT_OPTION := --javamicro_out
+else
+$(proto_java_sources_file_stamp): PRIVATE_PROTO_JAVA_OUTPUT_OPTION := --java_out
+endif
+$(proto_java_sources_file_stamp): PRIVATE_PROTOC_FLAGS := $(LOCAL_PROTOC_FLAGS)
+$(proto_java_sources_file_stamp) : $(proto_sources_fullpath) $(PROTOC)
+	$(call transform-proto-to-java)
+
+#TODO: protoc should output the dependencies introduced by imports.
+
+LOCAL_INTERMEDIATE_TARGETS += $(proto_java_sources_file_stamp)
+endif # proto_sources
+
 
 ###########################################################
 ## Java: Compile .java files to .class

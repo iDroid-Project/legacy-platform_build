@@ -112,7 +112,7 @@ $(word 3, 3, $(call default-locale, $(1)))
 endef
 
 BUILDINFO_SH := build/tools/buildinfo.sh
-$(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE)
+$(INSTALLED_BUILD_PROP_TARGET): $(BUILDINFO_SH) $(INTERNAL_BUILD_ID_MAKEFILE) $(BUILD_SYSTEM)/version_defaults.mk $(wildcard $(TARGET_DEVICE_DIR)/system.prop)
 	@echo Target buildinfo: $@
 	@mkdir -p $(dir $@)
 	$(hide) TARGET_BUILD_TYPE="$(TARGET_BUILD_VARIANT)" \
@@ -566,8 +566,12 @@ endif
 endif
 endif
 
+ifneq (true,$(TARGET_USERIMAGES_SPARSE_EXT_DISABLED))
+  INTERNAL_USERIMAGES_SPARSE_EXT_FLAG := -s
+endif
+
 ifeq ($(INTERNAL_USERIMAGES_USE_EXT),true)
-INTERNAL_USERIMAGES_DEPS := $(MKEXT2USERIMG) $(MAKE_EXT4FS)
+INTERNAL_USERIMAGES_DEPS := $(MKEXTUSERIMG) $(MAKE_EXT4FS)
 INTERNAL_USERIMAGES_BINARY_PATHS := $(sort $(dir $(INTERNAL_USERIMAGES_DEPS)))
 
 # $(1): src directory
@@ -577,8 +581,8 @@ INTERNAL_USERIMAGES_BINARY_PATHS := $(sort $(dir $(INTERNAL_USERIMAGES_DEPS)))
 # $(5): size of the partition
 define build-userimage-ext-target
   @mkdir -p $(dir $(2))
-    $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$(PATH) \
-	  $(MKEXT2USERIMG) $(1) $(2) $(4) $(3) $(5)
+  $(hide) PATH=$(foreach p,$(INTERNAL_USERIMAGES_BINARY_PATHS),$(p):)$(PATH) \
+	  $(MKEXTUSERIMG) $(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG) $(1) $(2) $(4) $(3) $(5)
 endef
 else
 INTERNAL_USERIMAGES_DEPS := $(MKYAFFS2)
@@ -690,8 +694,14 @@ ifneq ($(BOARD_NAND_PAGE_SIZE),)
 mkyaffs2_extra_flags := -c $(BOARD_NAND_PAGE_SIZE)
 else
 mkyaffs2_extra_flags :=
+BOARD_NAND_PAGE_SIZE := 2048
 endif
 
+ifneq ($(BOARD_NAND_SPARE_SIZE),)
+mkyaffs2_extra_flags += -s $(BOARD_NAND_SPARE_SIZE)
+else
+BOARD_NAND_SPARE_SIZE := 64
+endif
 
 # -----------------------------------------------------------------
 # system image
@@ -772,8 +782,12 @@ define build-systemtarball-target
 		$(INSTALLED_SYSTEMTARBALL_TARGET)
 endef
 
+ifndef SYSTEM_TARBALL_FORMAT
+    SYSTEM_TARBALL_FORMAT := bz2
+endif
+
 system_tar := $(PRODUCT_OUT)/system.tar
-INSTALLED_SYSTEMTARBALL_TARGET := $(system_tar).bz2
+INSTALLED_SYSTEMTARBALL_TARGET := $(system_tar).$(SYSTEM_TARBALL_FORMAT)
 $(INSTALLED_SYSTEMTARBALL_TARGET): PRIVATE_SYSTEM_TAR := $(system_tar)
 $(INSTALLED_SYSTEMTARBALL_TARGET): $(FS_GET_STATS) $(INTERNAL_SYSTEMIMAGE_FILES)
 	$(build-systemtarball-target)
@@ -785,6 +799,34 @@ systemtarball-nodeps: $(FS_GET_STATS) \
 
 .PHONY: stnod
 stnod: systemtarball-nodeps
+
+
+#######
+## boot tarball
+define build-boottarball-target
+    $(hide) echo "Target boot fs tarball: $(INSTALLED_BOOTTARBALL_TARGET)"
+    $(hide) mkdir -p $(PRODUCT_OUT)/boot
+    $(hide) cp -f $(INTERNAL_BOOTIMAGE_FILES) $(PRODUCT_OUT)/boot/.
+    $(hide) echo $(BOARD_KERNEL_CMDLINE) > $(PRODUCT_OUT)/boot/cmdline
+    $(hide) $(MKTARBALL) $(FS_GET_STATS) \
+                 $(PRODUCT_OUT) boot $(PRIVATE_BOOT_TAR) \
+                 $(INSTALLED_BOOTTARBALL_TARGET)
+endef
+
+ifndef BOOT_TARBALL_FORMAT
+    BOOT_TARBALL_FORMAT := bz2
+endif
+
+boot_tar := $(PRODUCT_OUT)/boot.tar
+INSTALLED_BOOTTARBALL_TARGET := $(boot_tar).$(BOOT_TARBALL_FORMAT)
+$(INSTALLED_BOOTTARBALL_TARGET): PRIVATE_BOOT_TAR := $(boot_tar)
+$(INSTALLED_BOOTTARBALL_TARGET): $(FS_GET_STATS) $(INTERNAL_BOOTIMAGE_FILES)
+	$(build-boottarball-target)
+
+.PHONY: boottarball-nodeps btnod
+boottarball-nodeps btnod: $(FS_GET_STATS) \
+                      $(filter-out boottarball-nodeps btnod,$(MAKECMDGOALS))
+	$(build-boottarball-target)
 
 
 # -----------------------------------------------------------------
@@ -1005,6 +1047,9 @@ endif
 	$(hide) echo "tool_extensions=$(tool_extensions)" >> $(zip_root)/META/misc_info.txt
 ifdef mkyaffs2_extra_flags
 	$(hide) echo "mkyaffs2_extra_flags=$(mkyaffs2_extra_flags)" >> $(zip_root)/META/misc_info.txt
+endif
+ifdef INTERNAL_USERIMAGES_SPARSE_EXT_FLAG
+	$(hide) echo "extfs_sparse_flag=$(INTERNAL_USERIMAGES_SPARSE_EXT_FLAG)" >> $(zip_root)/META/misc_info.txt
 endif
 	@# Zip everything up, preserving symlinks
 	$(hide) (cd $(zip_root) && zip -qry ../$(notdir $@) .)
@@ -1303,6 +1348,12 @@ $(INTERNAL_SDK_TARGET): PRIVATE_INPUT_FILES := $(sdk_atree_files)
 #
 #SDK_GNU_ERROR := true
 
+ifeq ($(HOST_OS),darwin)
+HOST_STRIP_SDK_LLVM := strip
+else
+HOST_STRIP_SDK_LLVM := strip --strip-all
+endif
+
 $(INTERNAL_SDK_TARGET): $(deps)
 	@echo "Package SDK: $@"
 	$(hide) rm -rf $(PRIVATE_DIR) $@
@@ -1323,12 +1374,16 @@ $(INTERNAL_SDK_TARGET): $(deps)
 			-I $(HOST_OUT) \
 			-I $(TARGET_COMMON_OUT_ROOT) \
 			-v "PLATFORM_NAME=android-$(PLATFORM_VERSION)" \
+			-v "OUT_DIR=$(OUT_DIR)" \
 			-o $(PRIVATE_DIR) && \
 		cp -f $(target_notice_file_txt) \
 				$(PRIVATE_DIR)/platforms/android-$(PLATFORM_VERSION)/images/NOTICE.txt && \
 		cp -f $(tools_notice_file_txt) $(PRIVATE_DIR)/tools/NOTICE.txt && \
+		if [ -f $(PRIVATE_DIR)/platform-tools/llvm-rs-cc ]; then \
+			$(HOST_STRIP_SDK_LLVM) $(PRIVATE_DIR)/platform-tools/llvm-rs-cc; \
+		fi && \
 		HOST_OUT_EXECUTABLES=$(HOST_OUT_EXECUTABLES) HOST_OS=$(HOST_OS) \
-                development/build/tools/sdk_clean.sh $(PRIVATE_DIR) && \
+			development/build/tools/sdk_clean.sh $(PRIVATE_DIR) && \
 		chmod -R ug+rwX $(PRIVATE_DIR) && \
 		cd $(dir $@) && zip -rq $(notdir $@) $(PRIVATE_NAME) \
 	) || ( rm -rf $(PRIVATE_DIR) $@ && exit 44 )
@@ -1363,3 +1418,4 @@ $(INTERNAL_FINDBUGS_HTML_TARGET): $(INTERNAL_FINDBUGS_XML_TARGET)
 # -----------------------------------------------------------------
 # These are some additional build tasks that need to be run.
 include $(sort $(wildcard $(BUILD_SYSTEM)/tasks/*.mk))
+-include $(sort $(wildcard vendor/*/build/tasks/*.mk))
