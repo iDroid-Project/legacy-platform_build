@@ -53,8 +53,6 @@ GRANDFATHERED_USER_MODULES += \
 	asm-3.1 \
 	atree \
 	audio \
-	badblocks \
-	badblocks_host \
 	bb2sym \
 	bb_dump \
 	bbprof \
@@ -81,8 +79,6 @@ GRANDFATHERED_USER_MODULES += \
 	dasm \
 	dbus-daemon \
 	ddmlib \
-	ddmlibTests \
-	ddmlib-prebuilt \
 	ddms \
 	ddmuilib \
 	debuggerd \
@@ -102,8 +98,6 @@ GRANDFATHERED_USER_MODULES += \
 	dumpstate \
 	dumpsys \
 	dx-tests \
-	e2fsck \
-	e2fsck_host \
 	easymock \
 	edify \
 	emmalib \
@@ -137,9 +131,6 @@ GRANDFATHERED_USER_MODULES += \
 	gzip \
 	hciattach \
 	hierarchyviewer \
-	hierarchyviewer1 \
-	hierarchyviewer2 \
-	hierarchyviewerlib \
 	hist_trace \
 	hosttestlib \
 	icudata \
@@ -159,7 +150,6 @@ GRANDFATHERED_USER_MODULES += \
 	jdwpspy \
 	jfreechart-1.0.9 \
 	jfreechart-1.0.9-swt \
-	jsilver \
 	jsr305 \
 	jsr305lib \
 	junit \
@@ -200,14 +190,12 @@ GRANDFATHERED_USER_MODULES += \
 	libcameraservice \
 	libcamerastub \
 	libc_common \
-	libchromium_net \
 	libc_nomalloc \
 	libctest \
 	libcutils \
 	libdb \
 	libdbus \
 	libdiskconfig \
-	libdiskconfig_host \
 	libdl \
 	libdrm1 \
 	libdrm1_jni \
@@ -224,18 +212,6 @@ GRANDFATHERED_USER_MODULES += \
 	libETC1 \
 	libexif \
 	libext \
-	libext2fs \
-	libext2fs_host \
-	libext2_blkid \
-	libext2_blkid_host \
-	libext2_com_err \
-	libext2_com_err_host \
-	libext2_e2p \
-	libext2_e2p_host \
-	libext2_profile \
-	libext2_profile_host \
-	libext2_uuid \
-	libext2_uuid_host \
 	libfdlibm \
 	libfdlibm-host \
 	libFFTEm \
@@ -246,13 +222,11 @@ GRANDFATHERED_USER_MODULES += \
 	libGLES_android \
 	libGLESv1_CM \
 	libGLESv2 \
-	libglib \
 	libglib_static \
 	libgui \
 	libhardware \
 	libhardware_legacy \
 	libhost \
-	libhyphenation \
 	libiprouteutil \
 	libiptc \
 	libjnigraphics \
@@ -374,7 +348,6 @@ GRANDFATHERED_USER_MODULES += \
 	libwpa_client \
 	libwrapsim \
 	libxml2 \
-	libxslt \
 	libzipfile \
 	lights.kraken \
 	lights.qsd8k \
@@ -395,8 +368,6 @@ GRANDFATHERED_USER_MODULES += \
 	minigzip \
 	mkbootfs \
 	mkbootimg \
-	mke2fs \
-	mke2fs_host \
 	mksdcard \
 	mksnapshot \
 	mkstubs \
@@ -404,12 +375,10 @@ GRANDFATHERED_USER_MODULES += \
 	mkyaffs2image \
 	monkey \
 	monkeyrunner \
-	MonkeyRunnerTest \
 	mtpd \
 	ndc \
 	netcfg \
 	netd \
-	network \
 	ninepatch \
 	oauth \
 	obbtool \
@@ -432,7 +401,6 @@ GRANDFATHERED_USER_MODULES += \
 	profile_trace \
 	q2dm \
 	q2g \
-	qemu-android \
 	qwerty2.kcm \
 	qwerty.kcm \
 	racoon \
@@ -440,8 +408,6 @@ GRANDFATHERED_USER_MODULES += \
 	read_method \
 	read_pid \
 	read_trace \
-	resize2fs \
-	resize2fs_host \
 	rgb2565 \
 	rild \
 	rsg-generator \
@@ -491,8 +457,6 @@ GRANDFATHERED_USER_MODULES += \
 	test_zipfile \
 	toolbox \
 	traceview \
-	tune2fs \
-	tune2fs_host \
 	tuttle2.kcm \
 	uix \
 	usbtest \

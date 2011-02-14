@@ -39,14 +39,7 @@ for f in ${subdirs} ${files} ; do
 done
 
 if [ $? -eq 0 ] ; then
-    case "${target_tarball}" in
-    *.bz2 )
-        bzip2 -c ${target_tar} > ${target_tarball}
-        ;;
-    *.gz )
-        gzip -c ${target_tar} > ${target_tarball}
-        ;;
-    esac
+    bzip2 -c ${target_tar} > ${target_tarball}
     success=$?
     [ $success -eq 0 ] || rm -f ${target_tarball}
     rm -f ${target_tar}

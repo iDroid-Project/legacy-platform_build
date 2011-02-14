@@ -25,9 +25,7 @@ TARGET_AR := $(HOST_AR)
 TARGET_GLOBAL_CFLAGS := $(HOST_GLOBAL_CFLAGS) -m32
 TARGET_GLOBAL_LDFLAGS := $(HOST_GLOBAL_LDFLAGS) -m32 -lpthread
 TARGET_NO_UNDEFINED_LDFLAGS := $(HOST_NO_UNDEFINED_LDFLAGS)
-ifeq ($(strip $(TARGET_ARCH_VARIANT)),)
 TARGET_ARCH_VARIANT := x86
-endif
 else #simulator
 
 # Provide a default variant.
@@ -46,8 +44,6 @@ TARGET_CXX := $(TARGET_TOOLS_PREFIX)g++$(HOST_EXECUTABLE_SUFFIX)
 TARGET_AR := $(TARGET_TOOLS_PREFIX)ar$(HOST_EXECUTABLE_SUFFIX)
 TARGET_OBJCOPY := $(TARGET_TOOLS_PREFIX)objcopy$(HOST_EXECUTABLE_SUFFIX)
 TARGET_LD := $(TARGET_TOOLS_PREFIX)ld$(HOST_EXECUTABLE_SUFFIX)
-TARGET_STRIP := $(TARGET_TOOLS_PREFIX)strip$(HOST_EXECUTABLE_SUFFIX)
-TARGET_STRIP_COMMAND = $(TARGET_STRIP) --strip-debug $< -o $@
 
 ifneq ($(wildcard $(TARGET_CC)),)
 TARGET_LIBGCC := \
@@ -76,23 +72,13 @@ endif
 KERNEL_HEADERS := $(KERNEL_HEADERS_COMMON) $(KERNEL_HEADERS_ARCH)
 
 TARGET_GLOBAL_CFLAGS += \
-			-Ulinux \
+			-march=i686 \
 			-m32 \
 			-fPIC \
 			-include $(call select-android-config-h,target_linux-x86)
 
 TARGET_GLOBAL_CPPFLAGS += \
 			-fno-use-cxa-atexit
-
-ifeq ($(TARGET_ARCH_VARIANT),x86-atom)
-    TARGET_GLOBAL_CFLAGS += -mtune=i686 -DUSE_SSSE3 -DUSE_SSE2 -mfpmath=sse -msse2
-else
-    TARGET_GLOBAL_CFLAGS += -march=i686
-endif
-
-TARGET_GLOBAL_CFLAGS += -D__ANDROID__
-TARGET_GLOBAL_LDFLAGS += -m32
-
 
 TARGET_C_INCLUDES := \
 	$(libc_root)/arch-x86/include \
@@ -111,7 +97,7 @@ TARGET_CRTEND_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtend_android.o
 TARGET_CRTBEGIN_SO_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtbegin_so.o
 TARGET_CRTEND_SO_O := $(TARGET_OUT_STATIC_LIBRARIES)/crtend_so.o
 
-TARGET_STRIP_MODULE:=true
+# TARGET_STRIP_MODULE:=true
 
 TARGET_DEFAULT_SYSTEM_SHARED_LIBRARIES := libc libstdc++ libm
 
@@ -121,7 +107,7 @@ $(TARGET_CXX) \
 	$(PRIVATE_TARGET_GLOBAL_LDFLAGS) \
 	 -nostdlib -Wl,-soname,$(notdir $@) \
 	 -shared -Bsymbolic \
-	$(TARGET_GLOBAL_CFLAGS) \
+	-fPIC -march=i686 \
 	$(PRIVATE_TARGET_GLOBAL_LD_DIRS) \
 	$(PRIVATE_TARGET_CRTBEGIN_SO_O) \
 	$(PRIVATE_ALL_OBJECTS) \
@@ -170,5 +156,8 @@ $(TARGET_CXX) \
 	-Wl,--end-group \
 	$(TARGET_CRTEND_O)
 endef
+
+TARGET_GLOBAL_CFLAGS += -m32
+TARGET_GLOBAL_LDFLAGS += -m32
 
 endif #simulator
